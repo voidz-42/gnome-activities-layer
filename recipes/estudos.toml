@@ -1,0 +1,24 @@
+# Receita "estudos": material de estudo na Atividade "Estudos".
+#
+#   activity run estudos
+
+activity = "Estudos"
+
+[[launch]]
+command = ["flatpak", "run", "md.obsidian.Obsidian"]
+match = "obsidian"
+workspace = 0
+
+[[launch]]
+# URLs em uma janela nova do navegador, no segundo workspace.
+command = ["flatpak", "run", "app.zen_browser.zen", "--new-window",
+           "https://developer.mozilla.org", "https://docs.python.org/3/"]
+match = "zen"
+workspace = 1
+
+[[launch]]
+# Um PDF no leitor do GNOME. `windows = 0` não espera janela nenhuma
+# (útil para comandos que não abrem janela); aqui esperamos 1, o padrão.
+command = ["papers", "~/Documentos/apostila.pdf"]
+match = "org.gnome.papers"
+workspace = 1

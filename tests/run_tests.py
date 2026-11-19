@@ -327,6 +327,56 @@ def main():
     state = json.load(open(state_file))
     check([a['name'] for a in state['activities']] == ['Trabalho', 'Default'], 'state.json saved')
 
+    print('== 8b. CLI and recipes')
+    activity = os.path.join(REPO, 'bin', 'activity')
+
+    def run_cli(*args):
+        return subprocess.run([sys.executable, '-I', activity, *args], capture_output=True, text=True, timeout=60)
+
+    recipes = os.path.join(os.environ['XDG_CONFIG_HOME'], 'activities-layer', 'recipes')
+    os.makedirs(recipes, exist_ok=True)
+    with open(os.path.join(recipes, 'teste.toml'), 'w') as f:
+        f.write(f'''
+activity = "Estudos"
+timeout = 15
+[[launch]]
+command = ["{sys.executable}", "-I", "{TESTWIN}", "org.test.Recipe", "R-ws0"]
+match = "org.test.recipe"
+workspace = 0
+[[launch]]
+# Same unique app: the second process forwards to the first one and exits.
+command = ["{sys.executable}", "-I", "{TESTWIN}", "org.test.Recipe", "R-ws1-slow", "1.5"]
+match = "org.test.recipe"
+workspace = 1
+''')
+    current = api('GetCurrent')
+    r = run_cli('run', 'teste', '--no-switch')
+    check(r.returncode == 0, f'activity run teste --no-switch (rc={r.returncode}, {r.stdout.strip()} {r.stderr.strip()})')
+    check(api('GetCurrent') == current, 'with --no-switch the current Activity does not change')
+    check('Estudos' in api('ListActivities'), 'the recipe created its Activity')
+    check(win('R-ws0') and win('R-ws0')['activity'] == 'Estudos' and win('R-ws0')['hidden'],
+          f'recipe window 1 is in Estudos, hidden ({win("R-ws0")})')
+    check(win('R-ws1-slow') and win('R-ws1-slow')['activity'] == 'Estudos' and win('R-ws1-slow')['hidden'],
+          f'recipe window 2 (reused process, slow) is in Estudos, hidden ({win("R-ws1-slow")})')
+    r = run_cli('switch', 'Estudos')
+    time.sleep(0.5)
+    check(r.returncode == 0 and api('GetCurrent') == 'Estudos', 'activity switch Estudos')
+    check(win('R-ws0')['workspace'] == 0 and win('R-ws1-slow')['workspace'] == 1,
+          f'recipe windows on the requested workspaces ({win("R-ws0")["workspace"]}, {win("R-ws1-slow")["workspace"]})')
+    r = run_cli('list')
+    check(r.returncode == 0 and '* ' in r.stdout and 'Estudos' in r.stdout, f'activity list:\n{r.stdout}')
+    r = run_cli('windows', 'Estudos')
+    check(r.returncode == 0 and 'R-ws0' in r.stdout, 'activity windows Estudos')
+    rid = win('R-ws0')['id']
+    r = run_cli('move', str(rid), 'Default')
+    check(r.returncode == 0 and win('R-ws0')['activity'] == 'Default', 'activity move')
+    r = run_cli('switch', 'Nope')
+    check(r.returncode == 1 and 'No Activity named' in r.stderr, f'errors are reported ({r.stderr.strip()})')
+    r = run_cli('run', 'missing-recipe')
+    check(r.returncode == 1 and 'recipe not found' in r.stderr, 'missing recipe is reported')
+    r = run_cli('switch', current)
+    api('RemoveActivity', 'Estudos')
+
     print('== 9b. shortcuts, indicator and preferences')
     current_before = api('GetCurrent')
     names = api('ListActivities')
@@ -406,11 +456,18 @@ def main():
 
     print('== 10. closing windows')
     shell_eval('''global.get_window_actors().map(a => a.meta_window)
-        .filter(w => (w.get_title() ?? "").includes("Activities Layer"))
+        .filter(w => !w.is_override_redirect())
         .forEach(w => w.delete(global.get_current_time()))''')
+    # The prefs app is D-Bus activated (not our child); match its exact path.
+    subprocess.run(['pkill', '-f', '^/usr/bin/gjs -m /usr/share/gnome-shell/org[.]gnome[.]Shell[.]Extensions$'],
+                   check=False)
     for p in procs:
         p.terminate()
-    wait_for(lambda: not windows(), what='windows to close')
+    try:
+        wait_for(lambda: not windows(), what='windows to close')
+    except TimeoutError:
+        print('  left open:', [(w['title'], w['wm_class'], w['hidden']) for w in windows()])
+        raise
     check(windows() == [], 'closed windows are forgotten')
 
     print()

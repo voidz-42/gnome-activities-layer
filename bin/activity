@@ -134,7 +134,9 @@ def call(method, *args):
          '--method', f'{IFACE}.{method}', '--', *[str(a) for a in args]],
         capture_output=True, text=True)
     if proc.returncode != 0:
-        msg = proc.stderr.strip()
+        # gdbus appends "(According to introspection data, you need to pass ...)"
+        msg = '\n'.join(l for l in proc.stderr.strip().splitlines()
+                        if not l.startswith('(According to introspection')).strip()
         if 'UnknownMethod' in msg or 'No such interface' in msg or 'UnknownObject' in msg:
             raise ActivityError('the Activities Layer extension is not running '
                                 '(gnome-extensions enable activities-layer@local)')
@@ -219,8 +221,22 @@ def spawn(argv):
         raise ActivityError(f'cannot run {argv[0]}: {e.strerror}') from None
 
 
-def run_recipe(name, switch=None, verbose=True):
+def wait_for_extension(seconds):
+    """At login the Shell (and the extension) may not be ready yet."""
+    end = time.time() + seconds
+    while True:
+        try:
+            return current()
+        except ActivityError:
+            if time.time() >= end:
+                raise
+            time.sleep(0.5)
+
+
+def run_recipe(name, switch=None, verbose=True, wait=0):
     recipe = load_recipe(name)
+    if wait:
+        wait_for_extension(wait)
     activity = recipe['activity'].strip()
     ensure_activity(activity)
     do_switch = recipe.get('switch', True) if switch is None else switch
@@ -374,8 +390,10 @@ def main(argv=None):
                    help='switch to the Activity (overrides the recipe)')
     g.add_argument('--no-switch', dest='switch', action='store_false',
                    help='stay in the current Activity (windows still land in the recipe one)')
+    s.add_argument('--wait', type=float, default=0, metavar='SECONDS',
+                   help='wait up to SECONDS for the extension to be available (useful at login)')
     s.add_argument('-q', '--quiet', action='store_true')
-    s.set_defaults(func=lambda a: run_recipe(a.recipe, a.switch, not a.quiet))
+    s.set_defaults(func=lambda a: run_recipe(a.recipe, a.switch, not a.quiet, a.wait))
 
     s = sub.add_parser('recipes', help='list available recipes')
     s.set_defaults(func=lambda a: print('\n'.join(list_recipes()) or f'(none in {RECIPES_DIR})'))

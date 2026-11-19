@@ -1,0 +1,16 @@
+# Exemplo de autostart: roda a receita "trabalho" no login.
+# DESATIVADO por padrão (X-GNOME-Autostart-enabled=false e Hidden=true).
+# Para ativar:
+#   cp autostart/activity-recipe-trabalho.desktop ~/.config/autostart/
+#   e troque as duas linhas abaixo para  X-GNOME-Autostart-enabled=true  e  Hidden=false
+# (ou ative/desative pelo app "Ajustes" > Aplicativos de inicialização).
+[Desktop Entry]
+Type=Application
+Name=Activity recipe: trabalho
+Comment=Opens the "trabalho" recipe in its Activity at login
+Exec=sh -c "exec \\$HOME/.local/bin/activity run trabalho --no-switch --wait 60 --quiet"
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=false
+X-GNOME-Autostart-Delay=5
+Hidden=true

@@ -1,0 +1,32 @@
+# Receita "trabalho": monta o ambiente de trabalho na Atividade "Trabalho".
+#
+#   activity run trabalho              # cria/ativa a Atividade e abre tudo
+#   activity run trabalho --no-switch  # abre tudo nela, mas fica onde está
+#
+# Cada [[launch]] roda um comando normal. Antes de rodar, o `activity` avisa a
+# extensão: "a próxima janela cujo app id / WM_CLASS contém <match> pertence a
+# esta Atividade (e a este workspace)". Assim a janela cai no lugar certo mesmo
+# se você trocar de Atividade enquanto o app abre, e mesmo quando o app
+# reaproveita um processo já aberto (Firefox, Zen, VS Code...).
+
+activity = "Trabalho"   # nome da Atividade (criada se não existir)
+switch = true           # trocar para ela? (padrão: true)
+timeout = 40            # segundos esperando cada janela (padrão: 30)
+
+[[launch]]
+# Navegador com as abas do dia. --new-window garante uma JANELA nova; sem ele
+# o navegador pode só abrir uma aba numa janela existente (de outra Atividade).
+command = ["flatpak", "run", "app.zen_browser.zen", "--new-window",
+           "https://mail.google.com", "https://calendar.google.com"]
+match = "zen"           # trecho do app id/WM_CLASS; veja `activity windows`
+workspace = 0           # workspace da Atividade, começando em 0
+
+[[launch]]
+command = ["flatpak", "run", "com.visualstudio.code", "--new-window", "~/code/projects"]
+match = "code"
+workspace = 1
+
+[[launch]]
+command = ["gnome-terminal", "--window", "--working-directory", "~/code/projects"]
+match = "org.gnome.terminal"
+workspace = 1

@@ -25,7 +25,24 @@ for arg in "$@"; do
 done
 
 ENV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/activities-layer-test.XXXXXX")
-[ $KEEP = 1 ] || trap 'rm -rf "$ENV_DIR"' EXIT
+cleanup() {
+    # Session helpers started on the private bus (calendar server, portals...)
+    # can outlive it. Kill only processes whose runtime dir is ours.
+    for p in /proc/[0-9]*; do
+        pid=${p#/proc/}
+        [ "$pid" = $$ ] && continue
+        tr '\0' '\n' 2>/dev/null < "$p/environ" | grep -qx "XDG_RUNTIME_DIR=$ENV_DIR/run" \
+            && kill "$pid" 2>/dev/null
+    done
+    [ $KEEP = 1 ] && return
+    sleep 0.5
+    # xdg-document-portal and gvfsd-fuse leave FUSE mounts in the runtime dir.
+    for m in doc gvfs; do
+        fusermount3 -u "$ENV_DIR/run/$m" 2>/dev/null || true
+    done
+    rm -rf "$ENV_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 export XDG_CONFIG_HOME=$ENV_DIR/config
 export XDG_DATA_HOME=$ENV_DIR/data
