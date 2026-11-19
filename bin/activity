@@ -1,0 +1,395 @@
+#!/usr/bin/python3
+"""activity - command line client for the "Activities Layer" GNOME Shell extension.
+
+Talks to the extension over D-Bus (through `gdbus`) and runs declarative
+recipes from ~/.config/activities-layer/recipes/<name>.toml.
+
+Only the Python 3 standard library is used (tomllib needs Python >= 3.11).
+"""
+import argparse
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+import tomllib
+
+DEST = 'org.gnome.Shell'
+PATH = '/org/gnome/Shell/Extensions/ActivitiesLayer'
+IFACE = 'org.gnome.Shell.Extensions.ActivitiesLayer'
+CONFIG_DIR = os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'),
+                          'activities-layer')
+RECIPES_DIR = os.path.join(CONFIG_DIR, 'recipes')
+
+
+class ActivityError(Exception):
+    pass
+
+
+# --------------------------------------------------------------------------
+# Minimal parser for the GVariant text format printed by `gdbus call`.
+# Supports what this API returns: tuples, arrays, strings, booleans, numbers,
+# and type annotations such as "uint32 5" or "@as []".
+
+_TOKEN = re.compile(r'''
+    (?P<ws>\s+)
+  | (?P<str>'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")
+  | (?P<punct>[()\[\],])
+  | (?P<typed>@[a-z{}()]+)
+  | (?P<word>[A-Za-z_][A-Za-z0-9_]*)
+  | (?P<num>[-+]?(?:0x[0-9a-fA-F]+|\d+(?:\.\d*)?(?:[eE][-+]?\d+)?))
+''', re.VERBOSE)
+
+_TYPE_WORDS = {'byte', 'int16', 'uint16', 'int32', 'uint32', 'int64', 'uint64',
+               'handle', 'double', 'objectpath', 'signature'}
+
+_ESCAPES = {'n': '\n', 't': '\t', 'r': '\r', 'b': '\b', 'f': '\f', 'v': '\v',
+            '\\': '\\', "'": "'", '"': '"', 'a': '\a'}
+
+
+def _unescape(body):
+    out, i = [], 0
+    while i < len(body):
+        c = body[i]
+        if c != '\\':
+            out.append(c)
+            i += 1
+            continue
+        n = body[i + 1]
+        if n == 'u':
+            out.append(chr(int(body[i + 2:i + 6], 16)))
+            i += 6
+        elif n == 'U':
+            out.append(chr(int(body[i + 2:i + 10], 16)))
+            i += 10
+        elif n in '01234567':
+            j = i + 1
+            while j < len(body) and j < i + 4 and body[j] in '01234567':
+                j += 1
+            out.append(chr(int(body[i + 1:j], 8)))
+            i = j
+        else:
+            out.append(_ESCAPES.get(n, n))
+            i += 2
+    return ''.join(out)
+
+
+def parse_gvariant(text):
+    tokens = []
+    pos = 0
+    while pos < len(text):
+        m = _TOKEN.match(text, pos)
+        if not m:
+            raise ValueError(f'cannot parse gdbus output near: {text[pos:pos + 30]!r}')
+        pos = m.end()
+        kind = m.lastgroup
+        if kind != 'ws':
+            tokens.append((kind, m.group()))
+
+    def value(i):
+        kind, tok = tokens[i]
+        if kind == 'typed' or (kind == 'word' and tok in _TYPE_WORDS):
+            return value(i + 1)
+        if kind == 'str':
+            return _unescape(tok[1:-1]), i + 1
+        if kind == 'num':
+            return (float(tok) if any(c in tok for c in '.eE') and not tok.startswith('0x')
+                    else int(tok, 0)), i + 1
+        if kind == 'word':
+            if tok in ('true', 'false'):
+                return tok == 'true', i + 1
+            if tok == 'nothing':
+                return None, i + 1
+            raise ValueError(f'unexpected word {tok!r}')
+        if tok in '([':
+            close = ')' if tok == '(' else ']'
+            items = []
+            i += 1
+            while tokens[i][1] != close:
+                item, i = value(i)
+                items.append(item)
+                if tokens[i][1] == ',':
+                    i += 1
+            return (tuple(items) if close == ')' else items), i + 1
+        raise ValueError(f'unexpected token {tok!r}')
+
+    result, end = value(0)
+    if end != len(tokens):
+        raise ValueError('trailing data in gdbus output')
+    return result
+
+
+# --------------------------------------------------------------------------
+# D-Bus helpers
+
+def call(method, *args):
+    """Calls a method of the extension and returns its (single) result."""
+    if not shutil.which('gdbus'):
+        raise ActivityError('gdbus not found (package glib2)')
+    proc = subprocess.run(
+        ['gdbus', 'call', '--session', '--dest', DEST, '--object-path', PATH,
+         '--method', f'{IFACE}.{method}', '--', *[str(a) for a in args]],
+        capture_output=True, text=True)
+    if proc.returncode != 0:
+        msg = proc.stderr.strip()
+        if 'UnknownMethod' in msg or 'No such interface' in msg or 'UnknownObject' in msg:
+            raise ActivityError('the Activities Layer extension is not running '
+                                '(gnome-extensions enable activities-layer@local)')
+        # "GDBus.Error:org.freedesktop.DBus.Error.InvalidArgs: No Activity named ..."
+        msg = re.sub(r'^Error: GDBus\.Error:[\w.]+:\s*', '', msg)
+        raise ActivityError(msg)
+    result = parse_gvariant(proc.stdout.strip())
+    return result[0] if len(result) == 1 else result
+
+
+def gv_string(s):
+    """Quotes a Python string for the gdbus command line (GVariant text)."""
+    return "'" + s.replace('\\', '\\\\').replace("'", "\\'") + "'"
+
+
+def list_activities():
+    return call('ListActivities')
+
+
+def current():
+    return call('GetCurrent')
+
+
+def ensure_activity(name):
+    if name.lower() not in (a.lower() for a in list_activities()):
+        call('CreateActivity', gv_string(name))
+
+
+# --------------------------------------------------------------------------
+# Recipes
+
+def recipe_path(name):
+    if os.sep in name or name.endswith('.toml'):
+        return os.path.expanduser(name)
+    return os.path.join(RECIPES_DIR, f'{name}.toml')
+
+
+def load_recipe(name):
+    path = recipe_path(name)
+    try:
+        with open(path, 'rb') as f:
+            recipe = tomllib.load(f)
+    except FileNotFoundError:
+        raise ActivityError(f'recipe not found: {path}') from None
+    except tomllib.TOMLDecodeError as e:
+        raise ActivityError(f'{path}: {e}') from None
+    if not isinstance(recipe.get('activity'), str) or not recipe['activity'].strip():
+        raise ActivityError(f'{path}: "activity" (string) is required')
+    for i, step in enumerate(recipe.get('launch', [])):
+        if 'command' not in step:
+            raise ActivityError(f'{path}: launch #{i + 1} has no "command"')
+    return recipe
+
+
+def expand_command(command):
+    if isinstance(command, str):
+        command = shlex.split(command)
+    if not isinstance(command, list) or not command:
+        raise ActivityError(f'invalid command: {command!r}')
+    return [os.path.expandvars(os.path.expanduser(str(a))) for a in command]
+
+
+def guess_match(argv):
+    """Best-effort app id / WM_CLASS guess for a command line."""
+    exe = os.path.basename(argv[0])
+    if exe == 'gtk-launch' and len(argv) > 1:
+        return re.sub(r'\.desktop$', '', argv[1])
+    if exe == 'flatpak' and 'run' in argv:
+        rest = [a for a in argv[argv.index('run') + 1:] if not a.startswith('-')]
+        if rest:
+            return rest[0]
+    return exe
+
+
+def spawn(argv):
+    try:
+        # Detached: the app must outlive this script and must not inherit our
+        # stdio. start_new_session keeps Ctrl+C here from killing it.
+        subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        raise ActivityError(f'cannot run {argv[0]}: {e.strerror}') from None
+
+
+def run_recipe(name, switch=None, verbose=True):
+    recipe = load_recipe(name)
+    activity = recipe['activity'].strip()
+    ensure_activity(activity)
+    do_switch = recipe.get('switch', True) if switch is None else switch
+    default_timeout = float(recipe.get('timeout', 30))
+
+    if do_switch and recipe.get('switch_first', True):
+        call('SwitchActivity', gv_string(activity))
+
+    pending = []
+    for step in recipe.get('launch', []):
+        argv = expand_command(step['command'])
+        wait = step.get('wait', True)
+        match = step.get('match') or guess_match(argv)
+        count = int(step.get('windows', 1))
+        workspace = int(step.get('workspace', -1))
+        timeout = float(step.get('timeout', default_timeout))
+
+        claim = None
+        if wait and count > 0:
+            # Register the claim BEFORE launching, so the window is assigned
+            # to this Activity whatever happens meanwhile.
+            claim = call('ExpectWindow', gv_string(activity), gv_string(match.lower()),
+                         workspace, f'uint32 {count}', f'uint32 {int(timeout * 1000)}')
+        if verbose:
+            print(f'[{activity}] {shlex.join(argv)}' + (f'  (waiting for "{match}")' if claim else ''))
+        spawn(argv)
+        if claim is not None:
+            pending.append((claim, match, step.get('sequential', False)))
+            if pending[-1][2]:
+                wait_claims(pending[-1:], verbose)
+                pending.pop()
+
+    wait_claims(pending, verbose)
+
+    if do_switch and not recipe.get('switch_first', True):
+        call('SwitchActivity', gv_string(activity))
+
+
+def wait_claims(pending, verbose):
+    remaining = list(pending)
+    while remaining:
+        time.sleep(0.25)
+        for item in list(remaining):
+            claim, match, _ = item
+            try:
+                info = json.loads(call('GetClaim', f'uint32 {claim}'))
+            except ActivityError:
+                info = {'done': True, 'expired': True, 'matched': []}
+            if info['done']:
+                remaining.remove(item)
+                if verbose and info['expired']:
+                    got = len(info['matched'])
+                    print(f'  ! "{match}": timed out ({got} window(s) arrived); '
+                          'check the "match" field (see `activity windows`)', file=sys.stderr)
+                elif verbose:
+                    print(f'  ✓ "{match}": window ready')
+
+
+def list_recipes():
+    if not os.path.isdir(RECIPES_DIR):
+        return []
+    return sorted(f[:-5] for f in os.listdir(RECIPES_DIR) if f.endswith('.toml'))
+
+
+# --------------------------------------------------------------------------
+# CLI
+
+def cmd_list(args):
+    state = json.loads(call('GetState'))
+    if args.json:
+        print(json.dumps(state, indent=2, ensure_ascii=False))
+        return
+    for i, a in enumerate(state['activities'], 1):
+        mark = '*' if a['current'] else ' '
+        print(f'{mark} {i}. {a["name"]}  ({a["windows"]} window{"s" if a["windows"] != 1 else ""})')
+
+
+def cmd_windows(args):
+    wins = json.loads(call('ListWindows'))
+    if args.activity:
+        wins = [w for w in wins if w['activity'].lower() == args.activity.lower()]
+    if args.json:
+        print(json.dumps(wins, indent=2, ensure_ascii=False))
+        return
+    for w in wins:
+        ws = 'all' if w['workspace'] < 0 else w['workspace'] + 1
+        state = 'hidden' if w['hidden'] else 'shown'
+        print(f'{w["id"]:>6}  {w["activity"]:<14} ws {ws!s:<3} {state:<6}  '
+              f'{w["wm_class"] or w["app_id"]:<28} {w["title"]}')
+
+
+def find_by_index_or_name(value):
+    names = list_activities()
+    if value.isdigit() and 1 <= int(value) <= len(names) and value not in names:
+        return names[int(value) - 1]
+    return value
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog='activity', description=__doc__.split('\n\n')[0],
+                                formatter_class=argparse.RawDescriptionHelpFormatter,
+                                epilog='Recipes live in ' + RECIPES_DIR)
+    sub = p.add_subparsers(dest='cmd', required=True, metavar='COMMAND')
+
+    s = sub.add_parser('list', aliases=['ls'], help='list Activities')
+    s.add_argument('--json', action='store_true')
+    s.set_defaults(func=cmd_list)
+
+    s = sub.add_parser('current', help='print the active Activity')
+    s.set_defaults(func=lambda a: print(current()))
+
+    s = sub.add_parser('switch', aliases=['sw'], help='switch to an Activity (name or number)')
+    s.add_argument('name')
+    s.add_argument('--create', action='store_true', help='create it if missing')
+    s.set_defaults(func=lambda a: (
+        a.create and ensure_activity(a.name),
+        call('SwitchActivity', gv_string(find_by_index_or_name(a.name)))))
+
+    s = sub.add_parser('new', help='create an Activity (and switch to it)')
+    s.add_argument('name', nargs='?', default='')
+    s.add_argument('--no-switch', action='store_true')
+    s.set_defaults(func=lambda a: (lambda n: (
+        print(n), None if a.no_switch else call('SwitchActivity', gv_string(n))))(
+        call('CreateActivity', gv_string(a.name))))
+
+    s = sub.add_parser('remove', aliases=['rm'], help='remove an Activity (its windows move to the active one)')
+    s.add_argument('name')
+    s.set_defaults(func=lambda a: call('RemoveActivity', gv_string(find_by_index_or_name(a.name))))
+
+    s = sub.add_parser('rename', help='rename an Activity')
+    s.add_argument('name')
+    s.add_argument('new_name')
+    s.set_defaults(func=lambda a: call('RenameActivity', gv_string(find_by_index_or_name(a.name)),
+                                       gv_string(a.new_name)))
+
+    s = sub.add_parser('windows', aliases=['win'], help='list managed windows and their ids')
+    s.add_argument('activity', nargs='?')
+    s.add_argument('--json', action='store_true')
+    s.set_defaults(func=cmd_windows)
+
+    s = sub.add_parser('move', help='move a window (id from `activity windows`) to an Activity')
+    s.add_argument('window_id', type=int)
+    s.add_argument('name')
+    s.set_defaults(func=lambda a: call('MoveWindowToActivity', f'uint64 {a.window_id}',
+                                       gv_string(find_by_index_or_name(a.name))))
+
+    s = sub.add_parser('run', help='run a recipe')
+    s.add_argument('recipe', help='recipe name (or path to a .toml file)')
+    g = s.add_mutually_exclusive_group()
+    g.add_argument('--switch', dest='switch', action='store_true', default=None,
+                   help='switch to the Activity (overrides the recipe)')
+    g.add_argument('--no-switch', dest='switch', action='store_false',
+                   help='stay in the current Activity (windows still land in the recipe one)')
+    s.add_argument('-q', '--quiet', action='store_true')
+    s.set_defaults(func=lambda a: run_recipe(a.recipe, a.switch, not a.quiet))
+
+    s = sub.add_parser('recipes', help='list available recipes')
+    s.set_defaults(func=lambda a: print('\n'.join(list_recipes()) or f'(none in {RECIPES_DIR})'))
+
+    args = p.parse_args(argv)
+    try:
+        args.func(args)
+    except ActivityError as e:
+        print(f'activity: {e}', file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

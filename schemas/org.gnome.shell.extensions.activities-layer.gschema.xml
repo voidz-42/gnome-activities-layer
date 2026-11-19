@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.activities-layer"
+          path="/org/gnome/shell/extensions/activities-layer/">
+    <key name="show-osd" type="b">
+      <default>true</default>
+      <summary>Show the Activity name on screen when switching</summary>
+    </key>
+    <key name="follow-moved-window" type="b">
+      <default>false</default>
+      <summary>Switch to the target Activity after moving a window with a shortcut</summary>
+    </key>
+    <key name="switch-on-hidden-window-activation" type="b">
+      <default>true</default>
+      <summary>Switch to a window's Activity when that window is activated while hidden</summary>
+      <description>For example when clicking a notification of an app whose window lives in another Activity.</description>
+    </key>
+    <key name="switch-to-next-activity" type="as">
+      <default><![CDATA[['<Super><Control><Alt>Right']]]></default>
+      <summary>Switch to the next Activity</summary>
+    </key>
+    <key name="switch-to-previous-activity" type="as">
+      <default><![CDATA[['<Super><Control><Alt>Left']]]></default>
+      <summary>Switch to the previous Activity</summary>
+    </key>
+    <key name="switch-to-activity-1" type="as">
+      <default><![CDATA[['<Super><Control><Alt>1']]]></default>
+      <summary>Switch to Activity 1</summary>
+    </key>
+    <key name="switch-to-activity-2" type="as">
+      <default><![CDATA[['<Super><Control><Alt>2']]]></default>
+      <summary>Switch to Activity 2</summary>
+    </key>
+    <key name="switch-to-activity-3" type="as">
+      <default><![CDATA[['<Super><Control><Alt>3']]]></default>
+      <summary>Switch to Activity 3</summary>
+    </key>
+    <key name="switch-to-activity-4" type="as">
+      <default><![CDATA[['<Super><Control><Alt>4']]]></default>
+      <summary>Switch to Activity 4</summary>
+    </key>
+    <key name="switch-to-activity-5" type="as">
+      <default><![CDATA[['<Super><Control><Alt>5']]]></default>
+      <summary>Switch to Activity 5</summary>
+    </key>
+    <key name="switch-to-activity-6" type="as">
+      <default><![CDATA[['<Super><Control><Alt>6']]]></default>
+      <summary>Switch to Activity 6</summary>
+    </key>
+    <key name="switch-to-activity-7" type="as">
+      <default><![CDATA[['<Super><Control><Alt>7']]]></default>
+      <summary>Switch to Activity 7</summary>
+    </key>
+    <key name="switch-to-activity-8" type="as">
+      <default><![CDATA[['<Super><Control><Alt>8']]]></default>
+      <summary>Switch to Activity 8</summary>
+    </key>
+    <key name="switch-to-activity-9" type="as">
+      <default><![CDATA[['<Super><Control><Alt>9']]]></default>
+      <summary>Switch to Activity 9</summary>
+    </key>
+    <key name="new-activity" type="as">
+      <default><![CDATA[['<Super><Control><Alt>n']]]></default>
+      <summary>Create a new Activity and switch to it</summary>
+    </key>
+    <key name="move-window-to-next-activity" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>Right']]]></default>
+      <summary>Move the focused window to the next Activity</summary>
+    </key>
+    <key name="move-window-to-previous-activity" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>Left']]]></default>
+      <summary>Move the focused window to the previous Activity</summary>
+    </key>
+    <key name="move-window-to-activity-1" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>1']]]></default>
+      <summary>Move the focused window to Activity 1</summary>
+    </key>
+    <key name="move-window-to-activity-2" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>2']]]></default>
+      <summary>Move the focused window to Activity 2</summary>
+    </key>
+    <key name="move-window-to-activity-3" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>3']]]></default>
+      <summary>Move the focused window to Activity 3</summary>
+    </key>
+    <key name="move-window-to-activity-4" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>4']]]></default>
+      <summary>Move the focused window to Activity 4</summary>
+    </key>
+    <key name="move-window-to-activity-5" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>5']]]></default>
+      <summary>Move the focused window to Activity 5</summary>
+    </key>
+    <key name="move-window-to-activity-6" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>6']]]></default>
+      <summary>Move the focused window to Activity 6</summary>
+    </key>
+    <key name="move-window-to-activity-7" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>7']]]></default>
+      <summary>Move the focused window to Activity 7</summary>
+    </key>
+    <key name="move-window-to-activity-8" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>8']]]></default>
+      <summary>Move the focused window to Activity 8</summary>
+    </key>
+    <key name="move-window-to-activity-9" type="as">
+      <default><![CDATA[['<Shift><Super><Control><Alt>9']]]></default>
+      <summary>Move the focused window to Activity 9</summary>
+    </key>
+  </schema>
+</schemalist>

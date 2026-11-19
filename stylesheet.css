@@ -1,0 +1,23 @@
+.activities-layer-label {
+  padding-left: 4px;
+}
+
+.activities-layer-count {
+  color: rgba(255, 255, 255, 0.55);
+  font-feature-settings: "tnum";
+}
+
+.activities-layer-dialog-content {
+  spacing: 12px;
+  padding: 12px 24px 0;
+  min-width: 320px;
+}
+
+.activities-layer-dialog-title {
+  font-weight: bold;
+  font-size: 1.2em;
+}
+
+.activities-layer-dialog-error {
+  color: #ff7b63;
+}

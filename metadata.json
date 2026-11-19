@@ -1,0 +1,9 @@
+{
+  "uuid": "activities-layer@local",
+  "name": "Activities Layer",
+  "description": "Groups windows and workspaces into Activities (e.g. \"Work\", \"Study\"). Only the active Activity's windows and workspaces are shown; the others are hidden from the desktop, Overview, Alt+Tab and the dash. Switch with shortcuts, the panel menu or D-Bus.\n\nThe extension also runs on the lock screen (unlock-dialog session mode) only so that locking does not disable it and briefly reveal and re-hide every window of every Activity. While locked it removes its panel indicator; its shortcuts are inactive.",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.activities-layer",
+  "session-modes": ["user", "unlock-dialog"],
+  "version-name": "0.1.0"
+}
