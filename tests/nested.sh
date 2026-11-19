@@ -100,7 +100,7 @@ dbus-run-session -- bash -c '
     gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
     gsettings set org.gnome.mutter dynamic-workspaces true
 
-    gnome-shell --headless --virtual-monitor 1280x800 ${AL_SECOND_MONITOR:+--virtual-monitor 1280x800} --no-x11 \
+    gnome-shell --headless --virtual-monitor 1280x800 ${AL_SECOND_MONITOR:+--virtual-monitor 1280x800} ${AL_FORCE_ANIMATIONS:+--force-animations} --no-x11 \
         --wayland-display "$WAYLAND_DISPLAY" >"$AL_LOG" 2>&1 &
     SHELL_PID=$!
     trap "kill $SHELL_PID 2>/dev/null; wait $SHELL_PID 2>/dev/null || true" EXIT

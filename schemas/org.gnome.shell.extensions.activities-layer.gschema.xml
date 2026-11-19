@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
+  <enum id="org.gnome.shell.extensions.activities-layer.SwitchAnimation">
+    <value nick="vertical" value="0"/>
+    <value nick="workspace" value="1"/>
+    <value nick="none" value="2"/>
+  </enum>
   <schema id="org.gnome.shell.extensions.activities-layer"
           path="/org/gnome/shell/extensions/activities-layer/">
+    <key name="show-indicator-label" type="b">
+      <default>true</default>
+      <summary>Show the Activity name next to its icon in the top bar</summary>
+    </key>
+    <key name="switch-animation" enum="org.gnome.shell.extensions.activities-layer.SwitchAnimation">
+      <default>'vertical'</default>
+      <summary>Animation when switching Activities</summary>
+      <description>vertical: windows slide up/down; workspace: GNOME's horizontal workspace slide (only when the active workspace changes); none: no animation.</description>
+    </key>
     <key name="show-osd" type="b">
       <default>true</default>
       <summary>Show the Activity name on screen when switching</summary>

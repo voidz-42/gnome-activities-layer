@@ -10,6 +10,7 @@
 # reaproveita um processo já aberto (Firefox, Zen, VS Code...).
 
 activity = "Trabalho"   # nome da Atividade (criada se não existir)
+icon = "applications-engineering-symbolic"  # ícone (opcional)
 switch = true           # trocar para ela? (padrão: true)
 timeout = 40            # segundos esperando cada janela (padrão: 30)
 

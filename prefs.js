@@ -16,6 +16,102 @@ const BUS_NAME = 'org.gnome.Shell';
 const OBJECT_PATH = '/org/gnome/Shell/Extensions/ActivitiesLayer';
 const INTERFACE = 'org.gnome.Shell.Extensions.ActivitiesLayer';
 
+// Symbolic icons shipped with the Adwaita icon theme (checked on Fedora 44).
+// Any other themed icon name can be typed in the dialog.
+const ICONS = [
+    'view-grid-symbolic', 'starred-symbolic', 'user-home-symbolic', 'user-bookmarks-symbolic',
+    'folder-symbolic', 'folder-documents-symbolic', 'x-office-document-symbolic',
+    'x-office-calendar-symbolic', 'x-office-spreadsheet-symbolic', 'x-office-presentation-symbolic',
+    'mail-unread-symbolic', 'accessories-text-editor-symbolic', 'document-edit-symbolic',
+    'accessories-dictionary-symbolic', 'help-browser-symbolic', 'web-browser-symbolic',
+    'utilities-terminal-symbolic', 'applications-engineering-symbolic', 'applications-science-symbolic',
+    'applications-system-symbolic', 'applications-utilities-symbolic', 'computer-symbolic',
+    'network-workgroup-symbolic', 'system-users-symbolic', 'avatar-default-symbolic',
+    'call-start-symbolic', 'phone-symbolic', 'security-high-symbolic',
+    'applications-graphics-symbolic', 'camera-photo-symbolic', 'folder-pictures-symbolic',
+    'applications-multimedia-symbolic', 'audio-headphones-symbolic', 'folder-music-symbolic',
+    'folder-videos-symbolic', 'media-playback-start-symbolic', 'applications-games-symbolic',
+    'input-gaming-symbolic', 'emoji-activities-symbolic', 'emoji-food-symbolic',
+    'emoji-nature-symbolic', 'emoji-objects-symbolic', 'emoji-travel-symbolic',
+    'emoji-flags-symbolic', 'emoji-people-symbolic', 'weather-clear-symbolic',
+    'weather-clear-night-symbolic', 'night-light-symbolic',
+];
+
+/** Dialog to pick an Activity icon. onDone('') resets to the default. */
+const IconDialog = GObject.registerClass(
+class ActivitiesLayerIconDialog extends Adw.Dialog {
+    _init(activityName, current, onDone) {
+        super._init({title: `Icon for “${activityName}”`, content_width: 460, content_height: 520});
+        const view = new Adw.ToolbarView();
+        const header = new Adw.HeaderBar();
+        const reset = new Gtk.Button({label: 'Default'});
+        reset.connect('clicked', () => {
+            onDone('');
+            this.close();
+        });
+        header.pack_start(reset);
+        view.add_top_bar(header);
+
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+            margin_top: 12,
+            margin_bottom: 12,
+            margin_start: 12,
+            margin_end: 12,
+        });
+        const flow = new Gtk.FlowBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            max_children_per_line: 8,
+            min_children_per_line: 6,
+            homogeneous: true,
+            row_spacing: 6,
+            column_spacing: 6,
+        });
+        for (const icon of ICONS) {
+            const button = new Gtk.Button({
+                child: new Gtk.Image({icon_name: icon, pixel_size: 24}),
+                tooltip_text: icon.replace(/-symbolic$/, ''),
+                css_classes: icon === current ? ['suggested-action'] : ['flat'],
+            });
+            button.connect('clicked', () => {
+                onDone(icon);
+                this.close();
+            });
+            flow.append(button);
+        }
+        box.append(new Gtk.ScrolledWindow({
+            child: flow,
+            vexpand: true,
+            hscrollbar_policy: Gtk.PolicyType.NEVER,
+        }));
+
+        // Free-form themed icon name, validated against the icon theme.
+        const entry = new Adw.EntryRow({
+            title: 'Other icon name (e.g. org.gnome.Nautilus-symbolic)',
+            show_apply_button: true,
+            text: ICONS.includes(current) ? '' : current,
+        });
+        const theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default());
+        entry.connect('apply', () => {
+            const name = entry.text.trim();
+            if (!name || !theme.has_icon(name)) {
+                entry.add_css_class('error');
+                return;
+            }
+            onDone(name);
+            this.close();
+        });
+        entry.connect('changed', () => entry.remove_css_class('error'));
+        const list = new Gtk.ListBox({css_classes: ['boxed-list'], selection_mode: Gtk.SelectionMode.NONE});
+        list.append(entry);
+        box.append(list);
+
+        view.set_content(box);
+        this.set_child(view);
+    }
+});
+
 const SHORTCUT_GROUPS = [
     ['Switch Activity', [
         ['switch-to-next-activity', 'Next Activity'],
@@ -198,6 +294,19 @@ export default class ActivitiesLayerPreferences extends ExtensionPreferences {
                     row.add_suffix(b);
                 };
                 const name = new GLib.Variant('s', activity.name);
+
+                const iconButton = new Gtk.Button({
+                    child: new Gtk.Image({icon_name: activity.icon, pixel_size: 16}),
+                    tooltip_text: 'Change icon',
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat'],
+                });
+                iconButton.connect('clicked', () => {
+                    new IconDialog(activity.name, activity.custom_icon ? activity.icon : '', icon =>
+                        call('SetActivityIcon', new GLib.Variant('(ss)', [activity.name, icon]))
+                            .catch(showError)).present(window);
+                });
+                row.add_prefix(iconButton);
                 button('go-up-symbolic', 'Move up', index > 0, () =>
                     call('MoveActivity', new GLib.Variant('(si)', [activity.name, index - 1])));
                 button('go-down-symbolic', 'Move down', index < state.activities.length - 1, () =>
@@ -268,18 +377,43 @@ export default class ActivitiesLayerPreferences extends ExtensionPreferences {
             title: 'Behavior',
             icon_name: 'preferences-system-symbolic',
         });
-        const group = new Adw.PreferencesGroup();
-        page.add(group);
-
-        const toggle = (key, title, subtitle) => {
+        const toggle = (group, key, title, subtitle = '') => {
             const row = new Adw.SwitchRow({title, subtitle});
             settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
             group.add(row);
         };
-        toggle('show-osd', 'Show Activity Name When Switching', '');
-        toggle('follow-moved-window', 'Follow Moved Windows',
+
+        const appearance = new Adw.PreferencesGroup({title: 'Appearance'});
+        page.add(appearance);
+        toggle(appearance, 'show-indicator-label', 'Show Activity Name in the Top Bar',
+            'When off, only the Activity icon is shown.');
+        toggle(appearance, 'show-osd', 'Show Activity Name When Switching');
+
+        const animations = [
+            ['vertical', 'Vertical Slide'],
+            ['workspace', 'GNOME Workspace Slide'],
+            ['none', 'None'],
+        ];
+        const animationRow = new Adw.ComboRow({
+            title: 'Switch Animation',
+            subtitle: 'The GNOME slide is horizontal and only plays when the workspace changes.',
+            model: Gtk.StringList.new(animations.map(([, label]) => label)),
+        });
+        const syncAnimation = () => {
+            const i = animations.findIndex(([nick]) => nick === settings.get_string('switch-animation'));
+            animationRow.selected = Math.max(0, i);
+        };
+        syncAnimation();
+        settings.connect('changed::switch-animation', syncAnimation);
+        animationRow.connect('notify::selected', () =>
+            settings.set_string('switch-animation', animations[animationRow.selected][0]));
+        appearance.add(animationRow);
+
+        const group = new Adw.PreferencesGroup({title: 'Windows'});
+        page.add(group);
+        toggle(group, 'follow-moved-window', 'Follow Moved Windows',
             'After moving a window with a shortcut, switch to its new Activity.');
-        toggle('switch-on-hidden-window-activation', 'Follow Activated Windows',
+        toggle(group, 'switch-on-hidden-window-activation', 'Follow Activated Windows',
             'When a window of another Activity is activated (e.g. from a notification), switch to that Activity.');
         return page;
     }

@@ -239,6 +239,8 @@ def run_recipe(name, switch=None, verbose=True, wait=0):
         wait_for_extension(wait)
     activity = recipe['activity'].strip()
     ensure_activity(activity)
+    if recipe.get('icon'):
+        call('SetActivityIcon', gv_string(activity), gv_string(str(recipe['icon'])))
     do_switch = recipe.get('switch', True) if switch is None else switch
     default_timeout = float(recipe.get('timeout', 30))
 
@@ -328,6 +330,17 @@ def cmd_windows(args):
               f'{w["wm_class"] or w["app_id"]:<28} {w["title"]}')
 
 
+def cmd_icon(args):
+    name = find_by_index_or_name(args.name)
+    if args.icon is None:
+        for a in json.loads(call('GetState'))['activities']:
+            if a['name'].lower() == name.lower():
+                print(a['icon'])
+                return
+        raise ActivityError(f'No Activity named "{name}"')
+    call('SetActivityIcon', gv_string(name), gv_string(args.icon))
+
+
 def find_by_index_or_name(value):
     names = list_activities()
     if value.isdigit() and 1 <= int(value) <= len(names) and value not in names:
@@ -371,6 +384,11 @@ def main(argv=None):
     s.add_argument('new_name')
     s.set_defaults(func=lambda a: call('RenameActivity', gv_string(find_by_index_or_name(a.name)),
                                        gv_string(a.new_name)))
+
+    s = sub.add_parser('icon', help='show or set the icon of an Activity ("" resets it)')
+    s.add_argument('name')
+    s.add_argument('icon', nargs='?', help='themed icon name, e.g. folder-documents-symbolic')
+    s.set_defaults(func=cmd_icon)
 
     s = sub.add_parser('windows', aliases=['win'], help='list managed windows and their ids')
     s.add_argument('activity', nargs='?')

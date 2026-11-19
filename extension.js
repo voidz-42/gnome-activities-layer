@@ -8,12 +8,14 @@ import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as AltTab from 'resource:///org/gnome/shell/ui/altTab.js';
 import * as Workspace from 'resource:///org/gnome/shell/ui/workspace.js';
+import * as WorkspaceAnimation from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
 import {Extension, InjectionManager} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {ActivityManager} from './lib/manager.js';
 import {ActivitiesDBus} from './lib/dbus.js';
 import {Keybindings} from './lib/keybindings.js';
 import {ActivitiesIndicator} from './lib/indicator.js';
+import {SwitchAnimator} from './lib/animation.js';
 
 export default class ActivitiesLayerExtension extends Extension {
     enable() {
@@ -22,6 +24,9 @@ export default class ActivitiesLayerExtension extends Extension {
         this._manager.enable();
 
         this._dbus = new ActivitiesDBus(this._manager);
+
+        this._animator = new SwitchAnimator(this._settings);
+        this._manager.setAnimator(this._animator);
 
         this._injections = new InjectionManager();
         this._patchShell();
@@ -42,6 +47,9 @@ export default class ActivitiesLayerExtension extends Extension {
         this._destroyUserUi();
 
         this._manager.disconnectObject(this);
+        this._manager.setAnimator(null);
+        this._animator.destroy();
+        this._animator = null;
 
         this._injections.clear();
         this._injections = null;
@@ -66,7 +74,7 @@ export default class ActivitiesLayerExtension extends Extension {
         if (!this._keybindings)
             this._keybindings = new Keybindings(this._settings, this._manager);
         if (!this._indicator) {
-            this._indicator = new ActivitiesIndicator(this._manager, this);
+            this._indicator = new ActivitiesIndicator(this._manager, this, this._settings);
             Main.panel.addToStatusArea(this.uuid, this._indicator, 0, 'left');
         }
     }
@@ -88,6 +96,23 @@ export default class ActivitiesLayerExtension extends Extension {
         this._injections.overrideMethod(AltTab.GroupCyclerPopup.prototype, '_getWindows',
             original => function () {
                 return original.call(this).filter(w => !w.skip_taskbar);
+            });
+
+        // GNOME's horizontal workspace slide: during an Activity switch it
+        // only plays when the setting asks for it ('workspace'); with the
+        // vertical animation or 'none' the workspace change is instant.
+        // WindowManager calls this._workspaceAnimation.animateSwitch() at run
+        // time (its signal handler itself is bound at construction, so it
+        // cannot be patched).
+        const manager = this._manager;
+        const settings = this._settings;
+        this._injections.overrideMethod(WorkspaceAnimation.WorkspaceAnimationController.prototype,
+            'animateSwitch', original => function (from, to, direction, onComplete) {
+                if (manager.switching && settings.get_string('switch-animation') !== 'workspace') {
+                    onComplete();
+                    return;
+                }
+                original.call(this, from, to, direction, onComplete);
             });
 
         // Workaround for a handler leak in Shell 50's overview Workspace:
@@ -125,7 +150,7 @@ export default class ActivitiesLayerExtension extends Extension {
     _showOsd(activity) {
         if (!this._settings.get_boolean('show-osd') || Main.sessionMode.isLocked)
             return;
-        const icon = Gio.ThemedIcon.new('view-grid-symbolic');
+        const icon = Gio.ThemedIcon.new(this._manager.iconOf(activity));
         Main.osdWindowManager.showAll(icon, activity.name, null);
     }
 }

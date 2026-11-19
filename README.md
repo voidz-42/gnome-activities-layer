@@ -57,6 +57,30 @@ Fica à esquerda e mostra a Atividade atual. O menu permite:
 - mover a janela focada para outra Atividade;
 - abrir as preferências.
 
+### Aparência
+
+Tudo isso fica em Preferências › Comportamento › Aparência.
+
+- **Ícone por Atividade:** em Preferências › Activities, clique no ícone à
+  esquerda do nome. Dá para escolher um dos ícones simbólicos do tema ou
+  digitar qualquer nome de ícone instalado. O ícone aparece no painel, no menu
+  e no aviso de troca.
+  - Pelo terminal: `activity icon Trabalho applications-engineering-symbolic`.
+  - Para voltar ao padrão: `activity icon Trabalho ""`.
+  - Numa receita: `icon = "..."`.
+- **Só o ícone no painel:** desligue "Show Activity Name in the Top Bar"
+  (chave `show-indicator-label`).
+- **Animação de troca** (chave `switch-animation`):
+
+  | Opção | Efeito |
+  |---|---|
+  | Vertical Slide (padrão) | As janelas da Atividade anterior saem por cima (ou por baixo, ao voltar) e as da nova entram pelo lado oposto. O fundo fica parado. |
+  | GNOME Workspace Slide | O deslize horizontal do GNOME, que só toca quando o workspace ativo muda. |
+  | None | Troca instantânea. |
+
+  As animações respeitam a configuração "Animações" do GNOME e não tocam com
+  a Visão Geral aberta.
+
 ### Comportamento
 
 - **Janelas novas** vão para a Atividade que estava ativa quando foram
@@ -109,6 +133,7 @@ Exemplos: [`recipes/trabalho.toml`](recipes/trabalho.toml) e
 
 ```toml
 activity = "Trabalho"      # obrigatório; criada se não existir
+icon = "applications-engineering-symbolic"   # opcional
 switch = true              # trocar para ela (padrão true)
 switch_first = true        # trocar antes de abrir os apps (padrão true)
 timeout = 30               # segundos esperando cada janela (padrão 30)
@@ -183,7 +208,8 @@ pode chamar.
 | `RenameActivity(s name, s new_name)` | `b` |
 | `MoveActivity(s name, i position)` | `b` |
 | `MoveWindowToActivity(t window_id, s name)` | `b` |
-| `GetState()` | `s` JSON: Atividades, atual, nº de janelas |
+| `SetActivityIcon(s name, s icon)` | `b` (`''` volta ao ícone padrão) |
+| `GetState()` | `s` JSON: Atividades, ícone, atual, nº de janelas |
 | `ListWindows()` | `s` JSON: id, título, wm_class, app_id, Atividade, workspace, hidden… |
 | `ExpectWindow(s activity, s match, i workspace, u count, u timeout_ms)` | `u` id da reivindicação |
 | `GetClaim(u id)` | `s` JSON: matched, remaining, expired, done |
@@ -226,9 +252,12 @@ janela recebe `unstick()` e é movida de volta ao índice salvo.
 
 Patches no Shell, todos via `InjectionManager` e desfeitos no `disable()`:
 
-1. `altTab.GroupCyclerPopup._getWindows`: o ciclo entre janelas do mesmo app
+1. `workspaceAnimation.WorkspaceAnimationController.animateSwitch`: durante
+   uma troca de Atividade, pula o deslize horizontal do GNOME, a menos que a
+   opção "GNOME Workspace Slide" esteja escolhida.
+2. `altTab.GroupCyclerPopup._getWindows`: o ciclo entre janelas do mesmo app
    (Alt+\`) usa `app.get_windows()` sem olhar `skip-taskbar`.
-2. `workspace.Workspace._doAddWindow` e `_doRemoveWindow`: contornam um
+3. `workspace.Workspace._doAddWindow` e `_doRemoveWindow`: contornam um
    vazamento de handlers `notify::skip-taskbar` no Shell 50. Sem isso, uma
    janela `skip-taskbar` adicionada várias vezes ao mesmo workspace deixa
    handlers que disparam depois em atores destruídos.
@@ -246,6 +275,7 @@ tests/nested.sh --zip dist/*.zip       # idem, instalando o pacote .zip
 tests/nested.sh --with-user-extensions # junto com as suas outras extensões
 AL_SHOTS=/tmp/shots tests/nested.sh    # salva capturas de tela
 AL_SECOND_MONITOR=1 AL_TEST_SCRIPT=$PWD/tests/multimonitor.py tests/nested.sh
+AL_FORCE_ANIMATIONS=1 AL_TEST_SCRIPT=$PWD/tests/visual.py tests/nested.sh   # ícones, rótulo, animações
 tests/nested.sh --shell                # bash dentro do ambiente, para explorar
 ```
 
@@ -326,5 +356,9 @@ Os detalhes de implementação estão comentados em [`lib/manager.js`](lib/manag
 - **Monitores secundários** com "workspaces só no principal": as janelas são
   escondidas e restauradas, mas uma janela "sempre visível" num monitor
   secundário não pode ser distinguida e passa a pertencer a uma Atividade.
+- **Animação vertical:** usa clones de janelas já escondidas. Funciona porque o
+  Clutter continua pintando o clone de um ator desmapeado, o mesmo mecanismo
+  que mostra janelas minimizadas na Visão Geral. Se um app descartar o buffer
+  da janela ao ser escondido, ela pode sumir em vez de deslizar.
 - **Apps X11 (XWayland):** devem funcionar, mas o teste automático roda sem
   XWayland.

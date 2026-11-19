@@ -3,6 +3,7 @@
 #   activity run estudos
 
 activity = "Estudos"
+icon = "accessories-dictionary-symbolic"   # opcional; veja `activity icon`
 
 [[launch]]
 command = ["flatpak", "run", "md.obsidian.Obsidian"]
