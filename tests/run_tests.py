@@ -200,8 +200,16 @@ def gnome_extensions(*args):
 
 def main():
     print('== 0. extension metadata')
-    info = subprocess.run(['gnome-extensions', 'info', 'activities-layer@local'],
-                          capture_output=True, text=True).stdout
+    def ext_info():
+        return subprocess.run(['gnome-extensions', 'info', 'activities-layer@local'],
+                              capture_output=True, text=True).stdout
+    # The D-Bus object appears inside enable(); the state flips to ACTIVE
+    # right after, so poll briefly.
+    try:
+        wait_for(lambda: 'State: ACTIVE' in ext_info(), timeout=10, what='ACTIVE state')
+    except TimeoutError:
+        pass
+    info = ext_info()
     print('    ' + info.strip().replace('\n', '\n    '))
     check('ACTIVE' in info, 'gnome-extensions info reports the extension as active')
 
@@ -386,13 +394,13 @@ workspace = 1
     print('== 9b. shortcuts, indicator and preferences')
     current_before = api('GetCurrent')
     names = api('ListActivities')
-    press('Super_L', 'Control_L', 'Alt_L', 'Down')
+    press('Super_L', 'Control_L', 'Down')
     expected = names[(names.index(current_before) + 1) % len(names)]
-    check(api('GetCurrent') == expected, f'<Super><Ctrl><Alt>Down switches to the next Activity ({api("GetCurrent")})')
-    press('Super_L', 'Control_L', 'Alt_L', 'Up')
-    check(api('GetCurrent') == current_before, f'<Super><Ctrl><Alt>Up switches back ({api("GetCurrent")})')
-    press('Super_L', 'Control_L', 'Alt_L', 'Right')
-    check(api('GetCurrent') == current_before, 'Right arrow is no longer bound by default')
+    check(api('GetCurrent') == expected, f'<Super><Ctrl>Down switches to the next Activity ({api("GetCurrent")})')
+    press('Super_L', 'Control_L', 'Up')
+    check(api('GetCurrent') == current_before, f'<Super><Ctrl>Up switches back ({api("GetCurrent")})')
+    press('Super_L', 'Control_L', 'Alt_L', 'Down')
+    check(api('GetCurrent') == current_before, 'the old <Super><Ctrl><Alt>Down is no longer bound')
     press('Super_L', 'Control_L', 'Alt_L', '1')
     check(api('GetCurrent') == names[0], f'<Super><Ctrl><Alt>1 switches to Activity 1 ({api("GetCurrent")})')
     press('Super_L', 'Control_L', 'Alt_L', 'n')
@@ -451,7 +459,7 @@ workspace = 1
         ind = shell_eval('Object.keys(Main.panel.statusArea).includes("activities-layer@local")')
         check(ind, 'indicator back after unlock')
         before_switch = api('GetCurrent')
-        press('Super_L', 'Control_L', 'Alt_L', 'Down')
+        press('Super_L', 'Control_L', 'Down')
         check(api('GetCurrent') != before_switch, 'shortcuts work again after unlock')
         api('SwitchActivity', before_switch)
     except TimeoutError as e:

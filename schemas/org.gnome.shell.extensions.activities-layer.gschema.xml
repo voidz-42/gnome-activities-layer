@@ -30,11 +30,11 @@
       <description>For example when clicking a notification of an app whose window lives in another Activity.</description>
     </key>
     <key name="switch-to-next-activity" type="as">
-      <default><![CDATA[['<Super><Control><Alt>Down']]]></default>
+      <default><![CDATA[['<Super><Control>Down']]]></default>
       <summary>Switch to the next Activity</summary>
     </key>
     <key name="switch-to-previous-activity" type="as">
-      <default><![CDATA[['<Super><Control><Alt>Up']]]></default>
+      <default><![CDATA[['<Super><Control>Up']]]></default>
       <summary>Switch to the previous Activity</summary>
     </key>
     <key name="switch-to-activity-1" type="as">
@@ -78,11 +78,11 @@
       <summary>Create a new Activity and switch to it</summary>
     </key>
     <key name="move-window-to-next-activity" type="as">
-      <default><![CDATA[['<Shift><Super><Control><Alt>Down']]]></default>
+      <default><![CDATA[['<Shift><Super><Control>Down']]]></default>
       <summary>Move the focused window to the next Activity</summary>
     </key>
     <key name="move-window-to-previous-activity" type="as">
-      <default><![CDATA[['<Shift><Super><Control><Alt>Up']]]></default>
+      <default><![CDATA[['<Shift><Super><Control>Up']]]></default>
       <summary>Move the focused window to the previous Activity</summary>
     </key>
     <key name="move-window-to-activity-1" type="as">

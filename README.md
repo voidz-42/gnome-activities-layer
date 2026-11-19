@@ -38,16 +38,17 @@ atalho.
 
 | Ação | Atalho |
 |---|---|
-| Próxima / anterior Atividade | `Super+Ctrl+Alt+↓` / `Super+Ctrl+Alt+↑` |
+| Próxima / anterior Atividade | `Super+Ctrl+↓` / `Super+Ctrl+↑` |
 | Ir para a Atividade 1…9 | `Super+Ctrl+Alt+1…9` |
 | Nova Atividade (e ir para ela) | `Super+Ctrl+Alt+N` |
-| Mover a janela focada para a próxima / anterior | `Shift+Super+Ctrl+Alt+↓` / `↑` |
+| Mover a janela focada para a próxima / anterior | `Shift+Super+Ctrl+↓` / `↑` |
 | Mover a janela focada para a Atividade 1…9 | `Shift+Super+Ctrl+Alt+1…9` |
 
-As setas para cima e para baixo acompanham a animação vertical: ↓ vai para a
-próxima Atividade, que entra por baixo. O prefixo `Super+Ctrl+Alt` foi escolhido porque os outros já são usados no
-GNOME 50: `Super+Ctrl+1…9` troca de workspace, `Super+Alt+8` liga a lupa e
-`Super+Alt+↑/↓` move a Visão Geral.
+As setas acompanham a animação vertical: ↓ vai para a próxima Atividade, que
+entra por baixo. Fica coerente com o GNOME, onde `Super+Ctrl+←/→` troca de
+workspace: na horizontal, workspaces; na vertical, Atividades. Os números usam
+também Alt porque `Super+Ctrl+1…9` já é "ir para o workspace N" no GNOME 50, e
+`Super+Alt+8` liga a lupa.
 
 ### Indicador no painel
 
@@ -319,7 +320,7 @@ Para ver um shell aninhado com janela (GNOME 49+), é preciso o pacote
    miniaturas de workspaces, no Alt+Tab, no Super+Tab nem como "em execução"
    no dash.
 3. Abra um app aqui e mude-o para o segundo workspace (Super+Shift+Page Down).
-4. Faça `Super+Ctrl+Alt+↑`: as janelas originais voltam aos mesmos
+4. Faça `Super+Ctrl+↑`: as janelas originais voltam aos mesmos
    workspaces, e o workspace ativo é o mesmo de antes.
 5. Use `Super+Ctrl+Alt+1` e `2`, e o menu do painel, para alternar. Confira
    que a janela focada é restaurada.
