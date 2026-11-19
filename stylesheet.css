@@ -21,3 +21,22 @@
 .activities-layer-dialog-error {
   color: #ff7b63;
 }
+
+.activities-layer-icon-grid {
+  padding: 4px 0;
+}
+
+.activities-layer-icon-button {
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.activities-layer-icon-button:hover,
+.activities-layer-icon-button:focus {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.activities-layer-icon-button:checked {
+  background-color: -st-accent-color;
+  color: -st-accent-fg-color;
+}

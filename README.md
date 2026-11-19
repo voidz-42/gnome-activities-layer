@@ -38,13 +38,14 @@ atalho.
 
 | Ação | Atalho |
 |---|---|
-| Próxima / anterior Atividade | `Super+Ctrl+Alt+→` / `Super+Ctrl+Alt+←` |
+| Próxima / anterior Atividade | `Super+Ctrl+Alt+↓` / `Super+Ctrl+Alt+↑` |
 | Ir para a Atividade 1…9 | `Super+Ctrl+Alt+1…9` |
 | Nova Atividade (e ir para ela) | `Super+Ctrl+Alt+N` |
-| Mover a janela focada para a próxima / anterior | `Shift+Super+Ctrl+Alt+→` / `←` |
+| Mover a janela focada para a próxima / anterior | `Shift+Super+Ctrl+Alt+↓` / `↑` |
 | Mover a janela focada para a Atividade 1…9 | `Shift+Super+Ctrl+Alt+1…9` |
 
-O prefixo `Super+Ctrl+Alt` foi escolhido porque os outros já são usados no
+As setas para cima e para baixo acompanham a animação vertical: ↓ vai para a
+próxima Atividade, que entra por baixo. O prefixo `Super+Ctrl+Alt` foi escolhido porque os outros já são usados no
 GNOME 50: `Super+Ctrl+1…9` troca de workspace, `Super+Alt+8` liga a lupa e
 `Super+Alt+↑/↓` move a Visão Geral.
 
@@ -59,17 +60,20 @@ Fica à esquerda e mostra a Atividade atual. O menu permite:
 
 ### Aparência
 
-Tudo isso fica em Preferências › Comportamento › Aparência.
+Fica no menu do indicador no painel e em Preferências › Activities (seção
+Appearance, logo abaixo da lista).
 
-- **Ícone por Atividade:** em Preferências › Activities, clique no ícone à
-  esquerda do nome. Dá para escolher um dos ícones simbólicos do tema ou
+- **Ícone por Atividade:** no menu do painel, "Icon of “…”" abre uma grade de
+  ícones para a Atividade atual. Em Preferências › Activities, clique no
+  ícone redondo à esquerda do nome de qualquer Atividade. Dá para escolher um dos ícones simbólicos do tema ou
   digitar qualquer nome de ícone instalado. O ícone aparece no painel, no menu
   e no aviso de troca.
   - Pelo terminal: `activity icon Trabalho applications-engineering-symbolic`.
   - Para voltar ao padrão: `activity icon Trabalho ""`.
   - Numa receita: `icon = "..."`.
-- **Só o ícone no painel:** desligue "Show Activity Name in the Top Bar"
-  (chave `show-indicator-label`).
+- **Só o ícone no painel:** desligue "Show Name in Top Bar" no menu do painel
+  ou "Show Activity Name in the Top Bar" nas preferências (chave
+  `show-indicator-label`).
 - **Animação de troca** (chave `switch-animation`):
 
   | Opção | Efeito |
@@ -315,7 +319,7 @@ Para ver um shell aninhado com janela (GNOME 49+), é preciso o pacote
    miniaturas de workspaces, no Alt+Tab, no Super+Tab nem como "em execução"
    no dash.
 3. Abra um app aqui e mude-o para o segundo workspace (Super+Shift+Page Down).
-4. Faça `Super+Ctrl+Alt+←`: as janelas originais voltam aos mesmos
+4. Faça `Super+Ctrl+Alt+↑`: as janelas originais voltam aos mesmos
    workspaces, e o workspace ativo é o mesmo de antes.
 5. Use `Super+Ctrl+Alt+1` e `2`, e o menu do painel, para alternar. Confira
    que a janela focada é restaurada.

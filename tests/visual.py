@@ -67,7 +67,39 @@ time.sleep(0.5)
 t.screenshot('icon-only-and-menu')
 items = t.shell_eval(f'{IND}.menu._getMenuItems().filter(i => i._icon).map(i => [i.label.text, i._icon.icon_name])')
 t.check(['Work', 'applications-engineering-symbolic'] in items, f'menu items have icons ({items})')
+
+print('== icon grid and name switch in the panel menu')
+sub = t.shell_eval(f'''(() => {{
+    const items = {IND}.menu._getMenuItems();
+    const sub = items.find(i => i.label?.text?.startsWith("Icon of"));
+    const sw = items.find(i => i.label?.text === "Show Name in Top Bar");
+    sub.setSubmenuShown(true);
+    return {{sub: sub?.label.text ?? null, switchState: sw?.state ?? null}};
+}})()''')
+time.sleep(0.5)
+t.screenshot('menu-icon-grid')
+t.check(sub['sub'] == 'Icon of “Work”', f'"Icon of" submenu present ({sub})')
+t.check(sub['switchState'] is False, 'menu switch reflects the hidden label')
+t.shell_eval(f'''(() => {{
+    const items = {IND}.menu._getMenuItems();
+    const sub = items.find(i => i.label?.text?.startsWith("Icon of"));
+    const buttons = [];
+    const walk = a => {{ if (a.accessible_name === "starred") buttons.push(a); a.get_children().forEach(walk); }};
+    walk(sub.menu.actor);
+    buttons[0].emit("clicked", 1);
+}})()''')
+time.sleep(0.5)
+t.check(state()['Work']['icon'] == 'starred-symbolic', f'clicking an icon in the menu sets it ({state()["Work"]["icon"]})')
+t.check(t.shell_eval(f'{IND}._icon.icon_name') == 'starred-symbolic', 'panel icon updated')
+t.shell_eval(f'''(() => {{
+    {IND}.menu.open();
+    const sw = {IND}.menu._getMenuItems().find(i => i.label?.text === "Show Name in Top Bar");
+    sw.toggle();
+}})()''')
+time.sleep(0.4)
+t.check(t.shell_eval(f'{IND}._label.visible') is True, 'menu switch shows the name again')
 t.shell_eval(f'{IND}.menu.close()')
+t.api('SetActivityIcon', 'Work', 'applications-engineering-symbolic')
 
 print('== vertical animation')
 t.check(t.shell_eval("(async () => (await import('gi://St')).default.Settings.get().enable_animations)()"), 'animations enabled (needs AL_FORCE_ANIMATIONS=1)')
