@@ -199,6 +199,12 @@ def gnome_extensions(*args):
 # --- tests --------------------------------------------------------------------
 
 def main():
+    print('== 0. extension metadata')
+    info = subprocess.run(['gnome-extensions', 'info', 'activities-layer@local'],
+                          capture_output=True, text=True).stdout
+    print('    ' + info.strip().replace('\n', '\n    '))
+    check('ACTIVE' in info, 'gnome-extensions info reports the extension as active')
+
     print('== 1. basic state')
     check(api('ListActivities') == ['Default'], 'starts with a single "Default" Activity')
     check(api('GetCurrent') == 'Default', 'Default is current')
@@ -424,6 +430,28 @@ workspace = 1
     except TimeoutError:
         check(False, 'preferences window opens')
     procs.append(prefs)
+
+    print('== 9c. lock screen keeps Activities hidden')
+    hidden_before = sorted(w['title'] for w in windows() if w['hidden'])
+    shell_eval('Main.screenShield.lock(false)')
+    try:
+        wait_for(lambda: shell_eval('Main.sessionMode.isLocked'), timeout=10, what='lock')
+        time.sleep(0.8)
+        hidden_locked = sorted(w['title'] for w in windows() if w['hidden'])
+        check(hidden_locked == hidden_before and hidden_before, f'windows stay hidden while locked ({hidden_locked})')
+        ind = shell_eval('Object.keys(Main.panel.statusArea).includes("activities-layer@local")')
+        check(not ind, 'indicator removed while locked')
+        shell_eval('Main.screenShield.deactivate(false)')
+        wait_for(lambda: not shell_eval('Main.sessionMode.isLocked'), timeout=10, what='unlock')
+        time.sleep(0.8)
+        ind = shell_eval('Object.keys(Main.panel.statusArea).includes("activities-layer@local")')
+        check(ind, 'indicator back after unlock')
+        before_switch = api('GetCurrent')
+        press('Super_L', 'Control_L', 'Alt_L', 'Right')
+        check(api('GetCurrent') != before_switch, 'shortcuts work again after unlock')
+        api('SwitchActivity', before_switch)
+    except TimeoutError as e:
+        check(False, f'lock screen test: {e}')
 
     print('== 9. disable/enable cycles')
     before = {w['title']: (w['activity'], w['hidden']) for w in windows()}

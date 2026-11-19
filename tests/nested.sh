@@ -6,22 +6,33 @@
 #    session are never touched
 #  - headless Wayland compositor with a virtual monitor (no window appears)
 #
-# usage: tests/nested.sh [--keep] [--shell]
+# usage: tests/nested.sh [--keep] [--shell] [--zip FILE]
 #   --keep   keep the temporary directory (logs) afterwards
 #   --shell  instead of running the tests, open an interactive bash inside the
 #            environment (WAYLAND_DISPLAY and the bus are set up)
+#   --with-user-extensions  also enable the extensions enabled in your real
+#            session (read-only symlinks), to catch interactions
+#   --zip F  install the packed extension F with `gnome-extensions install`
+#            instead of symlinking the repository (validates the package)
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 UUID=activities-layer@local
 KEEP=0
 MODE=test
-for arg in "$@"; do
-    case $arg in
+ZIP=
+WITH_USER=0
+USER_EXT_DIR=${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions
+USER_ENABLED=$(gsettings get org.gnome.shell enabled-extensions)
+while [ $# -gt 0 ]; do
+    case $1 in
         --keep) KEEP=1 ;;
         --shell) MODE=shell; KEEP=1 ;;
-        *) echo "unknown option $arg" >&2; exit 2 ;;
+        --zip) ZIP=$(realpath "$2"); shift ;;
+        --with-user-extensions) WITH_USER=1 ;;
+        *) echo "unknown option $1" >&2; exit 2 ;;
     esac
+    shift
 done
 
 ENV_DIR=$(mktemp -d "${TMPDIR:-/tmp}/activities-layer-test.XXXXXX")
@@ -53,9 +64,25 @@ mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME" \
          "$XDG_DATA_HOME/gnome-shell/extensions" "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-glib-compile-schemas "$REPO/schemas"
-ln -s "$REPO" "$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
+if [ -n "$ZIP" ]; then
+    gnome-extensions install --force "$ZIP"
+    ls "$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
+else
+    glib-compile-schemas "$REPO/schemas"
+    ln -s "$REPO" "$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
+fi
 ln -s "$REPO/tests/helper" "$XDG_DATA_HOME/gnome-shell/extensions/al-test-helper@local"
+EXTRA_ENABLED=
+if [ $WITH_USER = 1 ]; then
+    for uuid in $(python3 -c 'import ast,sys; print(" ".join(ast.literal_eval(sys.argv[1].replace("@as ",""))))' "$USER_ENABLED"); do
+        [ "$uuid" = $UUID ] && continue
+        [ -d "$USER_EXT_DIR/$uuid" ] || continue
+        ln -s "$(realpath "$USER_EXT_DIR/$uuid")" "$XDG_DATA_HOME/gnome-shell/extensions/$uuid"
+        EXTRA_ENABLED="$EXTRA_ENABLED, \"$uuid\""
+        echo "also enabling: $uuid"
+    done
+fi
+export EXTRA_ENABLED
 
 export WAYLAND_DISPLAY=al-test-wayland
 export GSETTINGS_SCHEMA_DIR="$REPO/schemas:${GSETTINGS_SCHEMA_DIR:-/usr/share/glib-2.0/schemas}"
@@ -69,11 +96,11 @@ STATUS=0
 dbus-run-session -- bash -c '
     set -e
     gsettings set org.gnome.shell disable-user-extensions false
-    gsettings set org.gnome.shell enabled-extensions "[\"activities-layer@local\", \"al-test-helper@local\"]"
+    gsettings set org.gnome.shell enabled-extensions "[\"activities-layer@local\", \"al-test-helper@local\"$EXTRA_ENABLED]"
     gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
     gsettings set org.gnome.mutter dynamic-workspaces true
 
-    gnome-shell --headless --virtual-monitor 1280x800 --no-x11 \
+    gnome-shell --headless --virtual-monitor 1280x800 ${AL_SECOND_MONITOR:+--virtual-monitor 1280x800} --no-x11 \
         --wayland-display "$WAYLAND_DISPLAY" >"$AL_LOG" 2>&1 &
     SHELL_PID=$!
     trap "kill $SHELL_PID 2>/dev/null; wait $SHELL_PID 2>/dev/null || true" EXIT
