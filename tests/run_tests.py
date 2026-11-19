@@ -164,6 +164,34 @@ def dash_running():
             .flatMap(a => a.get_windows().filter(w => !w.skip_taskbar).map(w => w.get_title()))'''))
 
 
+def press(*keys):
+    """Presses a key combination with a virtual keyboard (keysym names)."""
+    names = ', '.join(f'"{k}"' for k in keys)
+    shell_eval(f'''(async () => {{
+        const {{default: Clutter}} = await import('gi://Clutter');
+        const {{default: GLib}} = await import('gi://GLib');
+        const seat = Clutter.get_default_backend().get_default_seat();
+        globalThis._alKbd ??= seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+        const dev = globalThis._alKbd;
+        const keys = [{names}].map(n => Clutter[`KEY_${{n}}`]);
+        for (const k of keys)
+            dev.notify_keyval(GLib.get_monotonic_time(), k, Clutter.KeyState.PRESSED);
+        for (const k of keys.reverse())
+            dev.notify_keyval(GLib.get_monotonic_time(), k, Clutter.KeyState.RELEASED);
+    }})()''')
+    time.sleep(0.6)
+
+
+def screenshot(name):
+    """Saves a screenshot to $AL_SHOTS/<name>.png when AL_SHOTS is set."""
+    folder = os.environ.get('AL_SHOTS')
+    if not folder:
+        return
+    os.makedirs(folder, exist_ok=True)
+    gdbus('org.gnome.Shell', '/org/gnome/Shell/Screenshot', 'org.gnome.Shell.Screenshot.Screenshot',
+          'false', 'false', os.path.join(folder, f'{name}.png'))
+
+
 def gnome_extensions(*args):
     subprocess.run(['gnome-extensions', *args], check=True, capture_output=True)
 
@@ -299,6 +327,54 @@ def main():
     state = json.load(open(state_file))
     check([a['name'] for a in state['activities']] == ['Trabalho', 'Default'], 'state.json saved')
 
+    print('== 9b. shortcuts, indicator and preferences')
+    current_before = api('GetCurrent')
+    names = api('ListActivities')
+    press('Super_L', 'Control_L', 'Alt_L', 'Right')
+    expected = names[(names.index(current_before) + 1) % len(names)]
+    check(api('GetCurrent') == expected, f'<Super><Ctrl><Alt>Right switches to the next Activity ({api("GetCurrent")})')
+    press('Super_L', 'Control_L', 'Alt_L', '1')
+    check(api('GetCurrent') == names[0], f'<Super><Ctrl><Alt>1 switches to Activity 1 ({api("GetCurrent")})')
+    press('Super_L', 'Control_L', 'Alt_L', 'n')
+    check(len(api('ListActivities')) == len(names) + 1 and api('GetCurrent') == 'Activity 3',
+          f'<Super><Ctrl><Alt>n creates and switches ({api("ListActivities")}, {api("GetCurrent")})')
+    open_and_wait('org.test.Kappa', 'K-mover')
+    shell_eval('''Main.activateWindow(global.get_window_actors().map(a => a.meta_window)
+        .find(w => w.get_title() === "K-mover"))''')
+    time.sleep(0.3)
+    press('Shift_L', 'Super_L', 'Control_L', 'Alt_L', '1')
+    check(win('K-mover')['activity'] == names[0] and win('K-mover')['hidden'],
+          f'<Shift><Super><Ctrl><Alt>1 moves the focused window ({win("K-mover")})')
+    api('SwitchActivity', names[0])
+    time.sleep(0.4)
+    menu = shell_eval('''(() => {
+        const ind = Main.panel.statusArea["activities-layer@local"];
+        ind.menu.open();
+        const labels = ind.menu._getMenuItems().map(i => i.label?.text ?? i.constructor.name);
+        return {label: ind._label.text, labels};
+    })()''')
+    time.sleep(0.5)
+    screenshot('indicator-menu')
+    shell_eval('Main.panel.statusArea["activities-layer@local"].menu.close()')
+    check(menu['label'] == names[0], f'indicator shows the current Activity ({menu["label"]})')
+    check(all(n in menu['labels'] for n in api('ListActivities')) and 'New Activity…' in menu['labels'],
+          f'indicator menu lists Activities and actions ({menu["labels"]})')
+    api('RemoveActivity', 'Activity 3')
+
+    prefs = subprocess.Popen(['gnome-extensions', 'prefs', 'activities-layer@local'],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    def prefs_window():
+        return shell_eval('''global.get_window_actors().map(a => a.meta_window)
+            .some(w => (w.get_title() ?? "").includes("Activities Layer"))''')
+    try:
+        wait_for(prefs_window, timeout=15, what='preferences window')
+        time.sleep(1.5)
+        screenshot('prefs-activities')
+        check(True, 'preferences window opens')
+    except TimeoutError:
+        check(False, 'preferences window opens')
+    procs.append(prefs)
+
     print('== 9. disable/enable cycles')
     before = {w['title']: (w['activity'], w['hidden']) for w in windows()}
     for i in range(3):
@@ -329,6 +405,9 @@ def main():
         check(n_workspaces() <= 3, f'cycle {i}: extra workspaces collapsed (n={n_workspaces()})')
 
     print('== 10. closing windows')
+    shell_eval('''global.get_window_actors().map(a => a.meta_window)
+        .filter(w => (w.get_title() ?? "").includes("Activities Layer"))
+        .forEach(w => w.delete(global.get_current_time()))''')
     for p in procs:
         p.terminate()
     wait_for(lambda: not windows(), what='windows to close')
