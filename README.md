@@ -34,7 +34,10 @@ entre de novo.** Depois de editar o código, é preciso relogar também.
 ### Atalhos padrão
 
 Todos podem ser trocados em Preferências › Atalhos. Backspace desativa um
-atalho.
+atalho. Na primeira gravação o GNOME pergunta se o app de Extensões pode
+"inibir atalhos": responda Permitir. Sem isso, combinações que o GNOME ou a
+própria extensão já usam (como `Super+Ctrl+↓`) seriam executadas em vez de
+gravadas.
 
 | Ação | Atalho |
 |---|---|
@@ -281,6 +284,7 @@ tests/nested.sh --with-user-extensions # junto com as suas outras extensões
 AL_SHOTS=/tmp/shots tests/nested.sh    # salva capturas de tela
 AL_SECOND_MONITOR=1 AL_TEST_SCRIPT=$PWD/tests/multimonitor.py tests/nested.sh
 AL_FORCE_ANIMATIONS=1 AL_TEST_SCRIPT=$PWD/tests/visual.py tests/nested.sh   # ícones, rótulo, animações
+AL_TEST_SCRIPT=$PWD/tests/shortcut_dialog.py tests/nested.sh   # gravação de atalhos nas preferências
 tests/nested.sh --shell                # bash dentro do ambiente, para explorar
 ```
 

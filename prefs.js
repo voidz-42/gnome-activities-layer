@@ -121,7 +121,28 @@ class ActivitiesLayerShortcutDialog extends Adw.Dialog {
         }));
         this.set_child(view);
 
-        const controller = new Gtk.EventControllerKey();
+        // While recording, ask the compositor to stop handling global
+        // shortcuts (keyboard-shortcuts-inhibit on Wayland). Otherwise any
+        // combination already in use (by GNOME or by this extension, e.g.
+        // Super+Ctrl+Down) is consumed by the Shell and never reaches us.
+        // GNOME Shell asks the user once to allow it for this app.
+        this._inhibitedSurface = null;
+        this.connect('map', () => {
+            const surface = this.get_native()?.get_surface();
+            if (surface?.inhibit_system_shortcuts) {
+                surface.inhibit_system_shortcuts(null);
+                this._inhibitedSurface = surface;
+            }
+        });
+        this.connect('closed', () => {
+            this._inhibitedSurface?.restore_system_shortcuts();
+            this._inhibitedSurface = null;
+        });
+
+        const controller = new Gtk.EventControllerKey({
+            // Before focus navigation and the dialog's own key handling.
+            propagation_phase: Gtk.PropagationPhase.CAPTURE,
+        });
         controller.connect('key-pressed', (_c, keyval, keycode, state) => {
             let mask = state & Gtk.accelerator_get_default_mod_mask();
             mask &= ~Gdk.ModifierType.LOCK_MASK;
@@ -134,6 +155,15 @@ class ActivitiesLayerShortcutDialog extends Adw.Dialog {
                 this.close();
                 return Gdk.EVENT_STOP;
             }
+            // With Shift held, GTK reports the shifted symbol (Shift+1 gives
+            // "exclam"). Store the key itself, like GNOME Settings does, by
+            // translating the physical key without modifiers.
+            if (mask & Gdk.ModifierType.SHIFT_MASK) {
+                const [ok, plain] = this.get_display().translate_key(keycode, 0, controller.get_group());
+                if (ok && plain)
+                    keyval = plain;
+            }
+            keyval = Gdk.keyval_to_lower(keyval);
             if (!Gtk.accelerator_valid(keyval, mask))
                 return Gdk.EVENT_STOP;
             onDone([Gtk.accelerator_name_with_keycode(null, keyval, keycode, mask)]);
